@@ -1,0 +1,20 @@
+using System.Globalization;
+using System.Windows;
+using System.Windows.Data;
+
+namespace LoadLens.App.Converters;
+
+public sealed class PageVisibilityConverter : IValueConverter
+{
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        var current = value?.ToString() ?? string.Empty;
+        var expected = parameter?.ToString() ?? string.Empty;
+        return string.Equals(current, expected, StringComparison.OrdinalIgnoreCase)
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+    }
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
+        Binding.DoNothing;
+}

@@ -1,0 +1,41 @@
+name: build
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+
+      - name: Restore
+        run: dotnet restore LoadLens.sln
+
+      - name: Build
+        run: dotnet build LoadLens.sln -c Release --no-restore
+
+      - name: Diagnostic scenario tests
+        run: dotnet run --project tools/LoadLens.DiagHarness/LoadLens.DiagHarness.csproj -c Release --no-build
+
+      - name: Publish app
+        run: dotnet publish src/LoadLens.App/LoadLens.App.csproj -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -o artifacts/LoadLens-win-x64
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: LoadLens-win-x64
+          path: artifacts/LoadLens-win-x64
+          if-no-files-found: error

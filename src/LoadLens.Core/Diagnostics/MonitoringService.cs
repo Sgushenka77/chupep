@@ -8,7 +8,7 @@ namespace LoadLens.Core.Diagnostics;
 /// </summary>
 public sealed class MonitoringService : IDisposable
 {
-    private const int HistoryLength = 60;
+    private const int HistoryLength = 180;
 
     private readonly SystemSampler _sampler;
     private readonly DiagnosisEngine _diagnosis;

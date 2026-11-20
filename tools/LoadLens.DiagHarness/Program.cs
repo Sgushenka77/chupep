@@ -167,6 +167,15 @@ static int RunDiagnosticTests()
         cfg.ThreadShare = 0.5;
     }));
 
+    Case("disk bound with culprit", FindingKind.DiskBound, (ts, n) => Snapshot(ts, n, cfg =>
+    {
+        cfg.DiskActive = 97;
+        cfg.DiskQueue = 5;
+        cfg.DiskLatency = 55;
+        cfg.ProcessDiskRead = 12;
+        cfg.ProcessDiskWrite = 4;
+    }));
+
     Case("healthy", FindingKind.NoIssue, (ts, n) => Snapshot(ts, n, cfg =>
     {
         cfg.CpuTotal = 24;
@@ -182,14 +191,31 @@ static int RunDiagnosticTests()
     var reportUpdate = BuildReportUpdate();
     var report = HtmlReportBuilder.Build(reportUpdate);
     total++;
-    if (report.Length < 5000 || !report.Contains("LoadLens", StringComparison.Ordinal))
+    if (report.Length < 5000 ||
+        !report.Contains("LoadLens", StringComparison.Ordinal) ||
+        !report.Contains("История нагрузки", StringComparison.Ordinal) ||
+        !report.Contains("<svg", StringComparison.Ordinal))
     {
         failures++;
         Console.WriteLine("FAIL  HTML report");
     }
     else
     {
-        Console.WriteLine($"PASS  HTML report: {report.Length:N0} chars");
+        Console.WriteLine($"PASS  HTML report: {report.Length:N0} chars, history SVG included");
+    }
+
+    var csv = CsvHistoryBuilder.Build(reportUpdate.History);
+    total++;
+    var csvLines = csv.Split("\r\n", StringSplitOptions.RemoveEmptyEntries);
+    if (csvLines.Length != reportUpdate.History.Count + 1 ||
+        !csv.StartsWith("Время;CPU %", StringComparison.Ordinal))
+    {
+        failures++;
+        Console.WriteLine("FAIL  CSV history");
+    }
+    else
+    {
+        Console.WriteLine($"PASS  CSV history: {csvLines.Length - 1} rows");
     }
 
     Console.WriteLine();
@@ -245,6 +271,13 @@ static SystemSnapshot Snapshot(
     var cfg = new Scenario();
     configure(cfg);
 
+    var steps = new ProcessThreadMetric[]
+    {
+        new(9001, cfg.MaxThread),
+        new(9002, Math.Max(0, cfg.MaxThread * 0.12)),
+        new(9003, Math.Max(0, cfg.MaxThread * 0.05))
+    };
+
     var target = new ProcessMetrics(
         4242,
         "game",
@@ -258,7 +291,10 @@ static SystemSnapshot Snapshot(
         cfg.ProcessVram,
         Math.Max(0, cfg.VramShared - 300),
         true,
-        100);
+        100,
+        steps,
+        cfg.ProcessDiskRead,
+        cfg.ProcessDiskWrite);
 
     var background = new ProcessMetrics(
         100,
@@ -369,4 +405,6 @@ internal sealed class Scenario
     public double ThreadShare { get; set; } = 0.5;
     public double ProcessGpu { get; set; } = 35;
     public double ProcessVram { get; set; } = 1600;
+    public double ProcessDiskRead { get; set; }
+    public double ProcessDiskWrite { get; set; }
 }

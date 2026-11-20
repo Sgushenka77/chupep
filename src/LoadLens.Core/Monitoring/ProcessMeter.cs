@@ -119,18 +119,62 @@ internal sealed class ProcessMeter
                     processCpuSeconds = (totalCpu - previous.TotalCpu).TotalSeconds;
                 }
 
-                _processBaselines[pid] = new ProcessBaseline(totalCpu, DateTime.UtcNow);
+                _processBaselines[pid] = new ProcessBaseline(totalCpu, DateTime.UtcNow, 0, 0);
                 var cpuPercent = Math.Clamp(processCpuSeconds / elapsed / cores * 100.0, 0, 100);
+
+                var readMbps = 0.0;
+                var writeMbps = 0.0;
+                ulong readBytes = previous?.ReadBytes ?? 0;
+                ulong writeBytes = previous?.WriteBytes ?? 0;
+
+                try
+                {
+                    if (NativeMethods.GetProcessIoCounters(process.Handle, out var io))
+                    {
+                        readBytes = io.ReadTransferCount;
+                        writeBytes = io.WriteTransferCount;
+
+                        if (previous is not null &&
+                            (DateTime.UtcNow - previous.TakenAt).TotalSeconds < 30)
+                        {
+                            if (readBytes >= previous.ReadBytes)
+                            {
+                                readMbps = (readBytes - previous.ReadBytes) / elapsed / BytesToMb;
+                            }
+
+                            if (writeBytes >= previous.WriteBytes)
+                            {
+                                writeMbps = (writeBytes - previous.WriteBytes) / elapsed / BytesToMb;
+                            }
+                        }
+                    }
+                }
+                catch
+                {
+                    // I/O counters are unavailable for some protected processes.
+                }
+
+                _processBaselines[pid] = new ProcessBaseline(
+                    totalCpu,
+                    DateTime.UtcNow,
+                    readBytes,
+                    writeBytes);
 
                 var maxThreadPercent = 0.0;
                 var hottestThreadShare = 0.0;
+                IReadOnlyList<ProcessThreadMetric> topThreads = Array.Empty<ProcessThreadMetric>();
 
                 if (threadCount > 0 &&
                     pid > 4 &&
-                    (cpuPercent >= 0.08 || gpu.GpuPercent >= 0.25))
+                    (cpuPercent >= 0.08 || gpu.GpuPercent >= 0.25 || readMbps + writeMbps >= 0.05))
                 {
-                    var (maxThread, sumThreads) = ReadThreads(process, pid, elapsed, nextThreadBaselines);
+                    var (maxThread, sumThreads, threads) = ReadThreads(
+                        process,
+                        pid,
+                        elapsed,
+                        nextThreadBaselines);
                     maxThreadPercent = maxThread;
+                    topThreads = threads;
                     if (sumThreads > 0)
                     {
                         hottestThreadShare = Math.Clamp(maxThread / sumThreads, 0, 1);
@@ -140,7 +184,8 @@ internal sealed class ProcessMeter
                 var activity =
                     cpuPercent +
                     gpu.GpuPercent * 0.85 +
-                    Math.Min(8, gpu.VramMb / 512.0);
+                    Math.Min(8, gpu.VramMb / 512.0) +
+                    Math.Min(14, (readMbps + writeMbps) * 0.8);
 
                 if (hasWindow)
                 {
@@ -157,7 +202,7 @@ internal sealed class ProcessMeter
                     activity = 0;
                 }
 
-                if (activity < 0.03 && gpu.VramMb < 8)
+                if (activity < 0.03 && gpu.VramMb < 8 && readMbps + writeMbps < 0.05)
                 {
                     continue;
                 }
@@ -175,7 +220,10 @@ internal sealed class ProcessMeter
                     gpu.VramMb,
                     gpu.SharedMb,
                     hasWindow,
-                    activity));
+                    activity,
+                    topThreads,
+                    Math.Max(0, readMbps),
+                    Math.Max(0, writeMbps)));
             }
         }
 
@@ -192,14 +240,16 @@ internal sealed class ProcessMeter
             .ToArray();
     }
 
-    private (double MaxThreadPercent, double SumThreadsPercent) ReadThreads(
-        Process process,
-        int pid,
-        double elapsed,
-        Dictionary<(int Pid, int ThreadId), TimeSpan> nextBaselines)
+    private (double MaxThreadPercent, double SumThreadsPercent, IReadOnlyList<ProcessThreadMetric> TopThreads)
+        ReadThreads(
+            Process process,
+            int pid,
+            double elapsed,
+            Dictionary<(int Pid, int ThreadId), TimeSpan> nextBaselines)
     {
         var max = 0.0;
         var sum = 0.0;
+        var threads = new List<ProcessThreadMetric>();
 
         try
         {
@@ -219,6 +269,7 @@ internal sealed class ProcessMeter
                             100);
                         max = Math.Max(max, corePercent);
                         sum += corePercent;
+                        threads.Add(new ProcessThreadMetric(threadId, corePercent));
                     }
 
                     nextBaselines[key] = cpu;
@@ -234,7 +285,7 @@ internal sealed class ProcessMeter
             // The process may exit or be protected.
         }
 
-        return (max, sum);
+        return (max, sum, threads.OrderByDescending(t => t.CpuPercent).Take(5).ToArray());
     }
 
     private static HashSet<int> ReadWindowProcessIds()
@@ -268,5 +319,9 @@ internal sealed class ProcessMeter
         return result;
     }
 
-    private sealed record ProcessBaseline(TimeSpan TotalCpu, DateTime TakenAt);
+    private sealed record ProcessBaseline(
+        TimeSpan TotalCpu,
+        DateTime TakenAt,
+        ulong ReadBytes,
+        ulong WriteBytes);
 }

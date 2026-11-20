@@ -10,9 +10,9 @@
     <RootNamespace>LoadLens.App</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>Assets\LoadLens.ico</ApplicationIcon>
-    <Version>1.0.0</Version>
-    <FileVersion>1.0.0.0</FileVersion>
-    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <Version>1.1.0</Version>
+    <FileVersion>1.1.0.0</FileVersion>
+    <AssemblyVersion>1.1.0.0</AssemblyVersion>
     <Product>LoadLens</Product>
     <Description>Диагностика причин лагов: CPU в один поток, RAM, VRAM, GPU и диск</Description>
     <Authors>Mikhail</Authors>

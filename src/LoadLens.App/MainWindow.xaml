@@ -222,6 +222,119 @@
                 </Grid>
             </Border>
         </DataTemplate>
+        <DataTemplate x:Key="TrendStatTemplate">
+            <Border Background="#0BFFFFFF"
+                    BorderBrush="#18242F"
+                    BorderThickness="1"
+                    CornerRadius="10"
+                    Padding="13"
+                    Margin="0,0,8,0">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <Grid>
+                        <TextBlock Text="{Binding Label}"
+                                   FontSize="9"
+                                   FontWeight="SemiBold"
+                                   Foreground="#71849A" />
+                        <Ellipse Width="5"
+                                 Height="5"
+                                 Fill="{Binding Accent}"
+                                 HorizontalAlignment="Right"
+                                 VerticalAlignment="Center" />
+                    </Grid>
+                    <TextBlock Grid.Row="1"
+                               Text="{Binding NowText}"
+                               FontFamily="{StaticResource DisplayFont}"
+                               FontSize="23"
+                               FontWeight="SemiBold"
+                               Margin="0,6,0,0" />
+                    <StackPanel Grid.Row="2" Margin="0,7,0,0">
+                        <ProgressBar Style="{StaticResource Meter}"
+                                     Value="{Binding NowPercent, Mode=OneWay}"
+                                     Foreground="{Binding Accent}" />
+                        <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                            <TextBlock Text="сред. " FontSize="9.5" Foreground="#667A90" />
+                            <TextBlock Text="{Binding AverageText}" FontSize="9.5" Foreground="#A8B8C8" />
+                            <TextBlock Text="  ·  пик " FontSize="9.5" Foreground="#667A90" />
+                            <TextBlock Text="{Binding PeakText}" FontSize="9.5" Foreground="#A8B8C8" />
+                        </StackPanel>
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </DataTemplate>
+
+        <DataTemplate x:Key="ChartLegendTemplate">
+            <Border Margin="0,0,12,0" Padding="0,2">
+                <StackPanel Orientation="Horizontal">
+                    <Border Width="14"
+                            Height="3"
+                            Background="{Binding Stroke}"
+                            CornerRadius="2"
+                            VerticalAlignment="Center" />
+                    <TextBlock Text="{Binding Name}"
+                               Margin="6,0,0,0"
+                               FontSize="10.5"
+                               Foreground="#A8B8C8" />
+                </StackPanel>
+            </Border>
+        </DataTemplate>
+
+        <DataTemplate x:Key="TrendEventTemplate">
+            <Grid Margin="0,0,0,10">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="54" />
+                    <ColumnDefinition Width="4" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="{Binding TimeText}"
+                           FontSize="10"
+                           Foreground="#667A90"
+                           FontFamily="Consolas" />
+                <Border Grid.Column="1"
+                        Width="3"
+                        Height="16"
+                        Background="{Binding Accent}"
+                        CornerRadius="2"
+                        VerticalAlignment="Top" />
+                <TextBlock Grid.Column="2"
+                           Text="{Binding Title}"
+                           Margin="8,0,0,0"
+                           FontSize="11"
+                           Foreground="#C6D4E3"
+                           TextWrapping="Wrap" />
+            </Grid>
+        </DataTemplate>
+
+        <DataTemplate x:Key="ThreadChipTemplate">
+            <Border Background="#0BFFFFFF"
+                    BorderBrush="#18242F"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    Padding="9,6"
+                    Margin="0,0,7,7">
+                <StackPanel>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="{Binding ThreadText}"
+                                   FontFamily="Consolas"
+                                   FontSize="11"
+                                   Foreground="#D6E2EE" />
+                        <TextBlock Text="{Binding CpuText}"
+                                   Margin="7,0,0,0"
+                                   FontSize="10"
+                                   FontWeight="SemiBold"
+                                   Foreground="#F5B942" />
+                    </StackPanel>
+                    <ProgressBar Style="{StaticResource Meter}"
+                                 Value="{Binding BarPercent, Mode=OneWay}"
+                                 Foreground="#F5B942"
+                                 Margin="0,5,0,0" />
+                </StackPanel>
+            </Border>
+        </DataTemplate>
     </Window.Resources>
 
     <Grid>
@@ -306,6 +419,12 @@
                                  Tag="&#xE7C4;"
                                  Uid="Processes"
                                  Checked="Nav_Checked" />
+                    <RadioButton x:Name="NavTrends"
+                                 Style="{StaticResource NavItem}"
+                                 Content="Динамика"
+                                 Tag="&#xE9D2;"
+                                 Uid="Trends"
+                                 Checked="Nav_Checked" />
                     <RadioButton x:Name="NavReport"
                                  Style="{StaticResource NavItem}"
                                  Content="Отчёт"
@@ -337,7 +456,7 @@
 
                 <StackPanel Grid.Row="5" Orientation="Horizontal" Margin="4,0,0,0">
                     <Ellipse Width="5" Height="5" Fill="#3A4B5E" VerticalAlignment="Center" Margin="0,0,6,0" />
-                    <TextBlock Text="v1.0.0 · локально"
+                    <TextBlock Text="v1.1.0 · локально"
                                FontSize="9.5"
                                Foreground="#52657A" />
                 </StackPanel>
@@ -689,6 +808,7 @@
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="*" />
                         <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
                     <Grid>
                         <StackPanel>
@@ -753,6 +873,7 @@
                             </Grid>
                             <DataGrid Grid.Row="1"
                                       ItemsSource="{Binding ProcessView}"
+                                      SelectedItem="{Binding SelectedProcess, Mode=TwoWay}"
                                       Margin="0,0,0,8"
                                       ScrollViewer.CanContentScroll="True">
                                 <DataGrid.Columns>
@@ -811,6 +932,10 @@
                                                         Binding="{Binding RamText, Mode=OneWay}"
                                                         Width="0.8*"
                                                         ElementStyle="{StaticResource GridNumberText}" />
+                                    <DataGridTextColumn Header="ДИСК"
+                                                        Binding="{Binding DiskText, Mode=OneWay}"
+                                                        Width="0.8*"
+                                                        ElementStyle="{StaticResource GridNumberText}" />
                                     <DataGridTextColumn Header="ПОТОКИ"
                                                         Binding="{Binding ThreadsText, Mode=OneWay}"
                                                         Width="0.6*"
@@ -820,7 +945,132 @@
                         </Grid>
                     </Border>
 
-                    <Grid Grid.Row="2" Margin="0,10,0,0">
+                    <Border Grid.Row="2"
+                            Style="{StaticResource Card}"
+                            Padding="14"
+                            Margin="0,10,0,0">
+                        <Grid>
+                            <Grid Visibility="{Binding HasSelectedProcess, Converter={StaticResource BoolVisibility}}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="1.0*" />
+                                    <ColumnDefinition Width="1.15*" />
+                                    <ColumnDefinition Width="1.2*" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel>
+                                    <TextBlock Text="ВЫБРАННЫЙ ПРОЦЕСС"
+                                               FontSize="8.5"
+                                               FontWeight="SemiBold"
+                                               Foreground="#667A90" />
+                                    <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                        <Border Width="32"
+                                                Height="32"
+                                                CornerRadius="9"
+                                                Background="{Binding SelectedProcess.Accent}">
+                                            <TextBlock Text="{Binding SelectedProcess.Initials}"
+                                                       FontSize="10"
+                                                       FontWeight="Bold"
+                                                       Foreground="#07111F"
+                                                       HorizontalAlignment="Center"
+                                                       VerticalAlignment="Center" />
+                                        </Border>
+                                        <StackPanel Margin="9,0,0,0" VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding SelectedProcess.DisplayName}"
+                                                       FontSize="13"
+                                                       FontWeight="SemiBold"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       MaxWidth="220" />
+                                            <TextBlock FontSize="9.5" Foreground="#667A90" Margin="0,2,0,0">
+                                                <Run Text="PID " />
+                                                <Run Text="{Binding SelectedProcess.Pid, Mode=OneWay}" />
+                                                <Run Text=" · " />
+                                                <Run Text="{Binding SelectedProcess.WindowText, Mode=OneWay}" />
+                                            </TextBlock>
+                                        </StackPanel>
+                                    </StackPanel>
+                                    <TextBlock Text="Поток с наибольшей нагрузкой — первая точка для поиска узкого места. Один поток не может использовать больше одного ядра."
+                                               Margin="0,9,12,0"
+                                               FontSize="9.5"
+                                               LineHeight="14"
+                                               Foreground="#667A90"
+                                               TextWrapping="Wrap" />
+                                </StackPanel>
+
+                                <Grid Grid.Column="1" Margin="12,0,16,0">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel>
+                                        <TextBlock Text="CPU" FontSize="8.5" Foreground="#667A90" />
+                                        <TextBlock Text="{Binding SelectedProcess.CpuText}" FontSize="12.5" FontWeight="SemiBold" Margin="0,2,0,0" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="1">
+                                        <TextBlock Text="1 ПОТОК" FontSize="8.5" Foreground="#667A90" />
+                                        <TextBlock Text="{Binding SelectedProcess.MaxThreadText}" FontSize="12.5" FontWeight="SemiBold" Foreground="#F5B942" Margin="0,2,0,0" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="2">
+                                        <TextBlock Text="GPU" FontSize="8.5" Foreground="#667A90" />
+                                        <TextBlock Text="{Binding SelectedProcess.GpuText}" FontSize="12.5" FontWeight="SemiBold" Margin="0,2,0,0" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Row="1" Margin="0,9,0,0">
+                                        <TextBlock Text="VRAM" FontSize="8.5" Foreground="#667A90" />
+                                        <TextBlock Text="{Binding SelectedProcess.VramText}" FontSize="12.5" FontWeight="SemiBold" Margin="0,2,0,0" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Row="1" Grid.Column="1" Margin="0,9,0,0">
+                                        <TextBlock Text="RAM" FontSize="8.5" Foreground="#667A90" />
+                                        <TextBlock Text="{Binding SelectedProcess.RamText}" FontSize="12.5" FontWeight="SemiBold" Margin="0,2,0,0" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Row="1" Grid.Column="2" Margin="0,9,0,0">
+                                        <TextBlock Text="ДИСК" FontSize="8.5" Foreground="#667A90" />
+                                        <TextBlock Text="{Binding SelectedProcess.DiskText}" FontSize="12.5" FontWeight="SemiBold" Margin="0,2,0,0" />
+                                        <TextBlock FontSize="9" Foreground="#667A90" Margin="0,2,0,0">
+                                            <Run Text="Ч " />
+                                            <Run Text="{Binding SelectedProcess.DiskReadText, Mode=OneWay}" />
+                                            <Run Text=" · З " />
+                                            <Run Text="{Binding SelectedProcess.DiskWriteText, Mode=OneWay}" />
+                                        </TextBlock>
+                                    </StackPanel>
+                                </Grid>
+
+                                <StackPanel Grid.Column="2">
+                                    <TextBlock Text="ГОРЯЧИЕ ПОТОКИ" FontSize="8.5" FontWeight="SemiBold" Foreground="#667A90" />
+                                    <ItemsControl ItemsSource="{Binding SelectedProcess.TopThreads}"
+                                                  ItemTemplate="{StaticResource ThreadChipTemplate}"
+                                                  Margin="0,7,0,0">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <WrapPanel />
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                    </ItemsControl>
+                                    <TextBlock FontSize="9" Foreground="#52657A">
+                                        <Run Text="Всего потоков: " />
+                                        <Run Text="{Binding SelectedProcess.ThreadsText, Mode=OneWay}" />
+                                    </TextBlock>
+                                </StackPanel>
+                            </Grid>
+
+                            <StackPanel Visibility="{Binding ShowNoSelectedProcess, Converter={StaticResource BoolVisibility}}"
+                                        HorizontalAlignment="Center"
+                                        VerticalAlignment="Center">
+                                <TextBlock Text="Выберите процесс в таблице"
+                                           FontSize="12"
+                                           FontWeight="SemiBold"
+                                           HorizontalAlignment="Center" />
+                                <TextBlock Text="Покажу его горячие потоки, диск, GPU и память."
+                                           FontSize="10"
+                                           Foreground="#667A90"
+                                           Margin="0,4,0,0" />
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
+                    <Grid Grid.Row="3" Margin="0,10,0,0">
                         <TextBlock Text="«1 поток» — загрузка самого горячего потока относительно одного ядра. 100% означает, что одно ядро занято полностью."
                                    FontSize="10"
                                    Foreground="#667A90" />
@@ -829,6 +1079,124 @@
                                    Foreground="#52657A"
                                    HorizontalAlignment="Right" />
                     </Grid>
+                </Grid>
+
+                <!-- TRENDS -->
+                <Grid Visibility="{Binding SelectedPage, Converter={StaticResource PageVisibility}, ConverterParameter=Trends}">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                  HorizontalScrollBarVisibility="Disabled">
+                        <StackPanel Margin="0,0,6,20">
+                            <Grid>
+                                <StackPanel>
+                                    <TextBlock Text="Динамика нагрузки"
+                                               Style="{StaticResource SectionTitle}" />
+                                    <TextBlock Text="Как менялись ресурсы за последние 3 минуты. Смена вердикта попадает в события."
+                                               Margin="0,4,0,0"
+                                               FontSize="10.5"
+                                               Foreground="#667A90" />
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                    <Button Content="Экспорт CSV"
+                                            Style="{StaticResource GhostButton}"
+                                            Command="{Binding SaveHistoryCsvCommand}" />
+                                    <Button Content="Зафиксировать инцидент"
+                                            Style="{StaticResource PrimaryButton}"
+                                            Command="{Binding SaveReportCommand}"
+                                            Margin="8,0,0,0" />
+                                </StackPanel>
+                            </Grid>
+
+                            <ItemsControl ItemsSource="{Binding TrendStats}"
+                                          ItemTemplate="{StaticResource TrendStatTemplate}"
+                                          Margin="0,14,-8,0">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <UniformGrid Columns="5" />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                            </ItemsControl>
+
+                            <Border Style="{StaticResource Card}" Margin="0,16,0,0">
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+                                    <Grid>
+                                        <TextBlock Text="Совмещённый график"
+                                                   Style="{StaticResource SectionTitle}" />
+                                        <TextBlock Text="{Binding TrendWindowText}"
+                                                   HorizontalAlignment="Right"
+                                                   FontSize="10"
+                                                   Foreground="#667A90"
+                                                   VerticalAlignment="Center" />
+                                    </Grid>
+                                    <ItemsControl Grid.Row="1"
+                                                  ItemsSource="{Binding TrendSeries}"
+                                                  ItemTemplate="{StaticResource ChartLegendTemplate}"
+                                                  Margin="0,8,0,0">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <WrapPanel />
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                    </ItemsControl>
+                                    <controls:HistoryChart Grid.Row="2"
+                                                           Height="300"
+                                                           Margin="0,8,0,0"
+                                                           Series="{Binding TrendSeries}" />
+                                </Grid>
+                            </Border>
+
+                            <Grid Margin="0,16,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="1.05*" />
+                                    <ColumnDefinition Width="0.95*" />
+                                </Grid.ColumnDefinitions>
+                                <Border Style="{StaticResource Card}" Margin="0,0,8,0">
+                                    <StackPanel>
+                                        <Grid>
+                                            <TextBlock Text="События диагностики"
+                                                       Style="{StaticResource SectionTitle}" />
+                                            <TextBlock Text="{Binding TrendCsvStatus}"
+                                                       HorizontalAlignment="Right"
+                                                       FontSize="9"
+                                                       Foreground="#52657A"
+                                                       VerticalAlignment="Center" />
+                                        </Grid>
+                                        <ItemsControl ItemsSource="{Binding TrendEvents}"
+                                                      ItemTemplate="{StaticResource TrendEventTemplate}"
+                                                      Margin="0,13,0,0" />
+                                        <TextBlock Text="Смена вердикта появляется здесь автоматически: сверху — самые свежие события."
+                                                   FontSize="10"
+                                                   LineHeight="15"
+                                                   Foreground="#667A90"
+                                                   TextWrapping="Wrap"
+                                                   Margin="0,4,0,0" />
+                                    </StackPanel>
+                                </Border>
+                                <Border Grid.Column="1" Style="{StaticResource Card}" Margin="8,0,0,0">
+                                    <StackPanel>
+                                        <TextBlock Text="Снимок инцидента"
+                                                   Style="{StaticResource SectionTitle}" />
+                                        <TextBlock Text="Сохраните HTML в момент лага. В отчёт попадут последние 3 минуты, текущий вердикт, доказательства и виновники по процессам."
+                                                   Margin="0,6,0,0"
+                                                   FontSize="10.5"
+                                                   LineHeight="16"
+                                                   Foreground="#9AACBF"
+                                                   TextWrapping="Wrap" />
+                                        <Border Height="1" Background="#1A2835" Margin="0,12,0,11" />
+                                        <TextBlock Text="CSV — для Excel и собственного анализа. HTML — чтобы показать проблему другому человеку."
+                                                   FontSize="10"
+                                                   LineHeight="15"
+                                                   Foreground="#667A90"
+                                                   TextWrapping="Wrap" />
+                                    </StackPanel>
+                                </Border>
+                            </Grid>
+                        </StackPanel>
+                    </ScrollViewer>
                 </Grid>
 
                 <!-- REPORT -->
@@ -861,7 +1229,7 @@
                                                    FontSize="21"
                                                    FontWeight="SemiBold"
                                                    Margin="0,14,0,6" />
-                                        <TextBlock Text="Сохраните снимок состояния в момент лага. В отчёте будет вердикт, доказательства, рекомендации и таблица процессов — его можно отправить другу или приложить к обращению."
+                                        <TextBlock Text="Сохраните снимок состояния в момент лага. В отчёте будет вердикт, доказательства, рекомендации, график истории за 3 минуты и таблица процессов — его можно отправить другу или приложить к обращению."
                                                    FontSize="11.5"
                                                    LineHeight="17"
                                                    Foreground="#9AACBF"
@@ -916,6 +1284,10 @@
                                                    FontSize="12"
                                                    Foreground="#C8D6E5" />
                                         <TextBlock Text="Все найденные узкие места"
+                                                   Margin="0,0,0,9"
+                                                   FontSize="12"
+                                                   Foreground="#C8D6E5" />
+                                        <TextBlock Text="График истории 3 минуты"
                                                    Margin="0,0,0,9"
                                                    FontSize="12"
                                                    Foreground="#C8D6E5" />

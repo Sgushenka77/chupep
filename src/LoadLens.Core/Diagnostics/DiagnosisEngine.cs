@@ -46,7 +46,7 @@ public sealed class DiagnosisEngine
         AddVramFinding(findings, snapshot);
         AddGpuFinding(findings, snapshot, target);
         AddCpuFindings(findings, snapshot, target);
-        AddDiskFinding(findings, snapshot);
+        AddDiskFinding(findings, snapshot, target);
         AddThermalFinding(findings, snapshot);
         AddDpcFinding(findings, snapshot);
         AddBackgroundFinding(findings, snapshot, target);
@@ -393,7 +393,10 @@ public sealed class DiagnosisEngine
             target));
     }
 
-    private void AddDiskFinding(List<Finding> findings, SystemSnapshot snapshot)
+    private void AddDiskFinding(
+        List<Finding> findings,
+        SystemSnapshot snapshot,
+        ProcessMetrics? target)
     {
         var recent = Last(3).Select(s => s.Disk).ToArray();
         if (recent.Length < 3)
@@ -417,23 +420,43 @@ public sealed class DiagnosisEngine
             ? Severity.High
             : Severity.Medium;
 
+        var topDisk = snapshot.Processes
+            .Where(p => p.DiskMbps >= 0.1)
+            .OrderByDescending(p => p.DiskMbps)
+            .FirstOrDefault();
+
+        var evidence = new List<Evidence>
+        {
+            new("Активность диска", $"{avgActive:0}%"),
+            new("Очередь", $"{avgQueue:0.0}"),
+            new("Задержка", $"{avgLatency:0} мс"),
+            new("Обмен", $"{snapshot.Disk.ReadMbps + snapshot.Disk.WriteMbps:0.0} МБ/с")
+        };
+        if (topDisk is not null)
+        {
+            evidence.Add(new Evidence(
+                "Больше всего диска",
+                $"{topDisk.DisplayName} · {topDisk.DiskMbps:0.0} МБ/с",
+                $"чтение {topDisk.DiskReadMbps:0.0} · запись {topDisk.DiskWriteMbps:0.0}"));
+        }
+
         findings.Add(new Finding(
             "disk-bound",
             FindingKind.DiskBound,
             severity,
             "Диск стал узким местом",
             $"Диск загружен на {avgActive:0}%, очередь запросов {avgQueue:0.0}, средняя задержка {avgLatency:0} мс. " +
-            "Пока диск занят, игра и система ждут загрузки данных — это ощущается как фризы при подгрузке и долгие отклики.",
+            (topDisk is null
+                ? "Пока диск занят, игра и система ждут загрузки данных — это ощущается как фризы при подгрузке и долгие отклики."
+                : $"Больше всего диска сейчас использует {topDisk.DisplayName} ({topDisk.DiskMbps:0.0} МБ/с). Пока он занят, игра и система ждут загрузки данных."),
+            evidence,
             new[]
             {
-                new Evidence("Активность диска", $"{avgActive:0}%"),
-                new Evidence("Очередь", $"{avgQueue:0.0}"),
-                new Evidence("Задержка", $"{avgLatency:0} мс"),
-                new Evidence("Обмен", $"{snapshot.Disk.ReadMbps + snapshot.Disk.WriteMbps:0.0} МБ/с")
-            },
-            new[]
-            {
-                "Откройте «Диспетчер задач → Производительность → Диск» и найдите процесс, который читает или пишет больше всех.",
+                topDisk is null
+                    ? "Откройте «Диспетчер задач → Производительность → Диск» и найдите процесс, который читает или пишет больше всех."
+                    : target is not null && topDisk.Pid == target.Pid
+                        ? $"Игра/программа {topDisk.DisplayName} активно читает диск. Перенесите её на SSD и проверьте, не подгружает ли она данные во время игры."
+                        : $"Ограничьте фоновую активность {topDisk.DisplayName} или перенесите её данные на другой диск.",
                 "Приостановите обновления Windows, индексацию и сканирование антивируса на время игры.",
                 "Перенесите игру и файл подкачки на SSD; проверьте здоровье диска (SMART) и свободное место.",
                 "Если диск загружен на 100% при низкой скорости, проверьте кабель SATA и очередь ошибок в журнале событий."

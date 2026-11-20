@@ -60,6 +60,11 @@ th { text-align:left; color:var(--muted); font-size:11px; text-transform:upperca
 td { border-bottom:1px solid #edf1f5; padding:8px 6px; }
 td.num, th.num { text-align:right; font-variant-numeric:tabular-nums; }
 .metrics { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; }
+.chart-wrap { border:1px solid var(--line); border-radius:10px; padding:12px 10px 6px; background:#fbfcfd; }
+.chart-wrap svg { display:block; width:100%; height:auto; }
+.chart-legend { display:flex; flex-wrap:wrap; gap:16px; margin-top:10px; color:var(--muted); font-size:12px; }
+.chart-legend span { display:inline-flex; align-items:center; gap:6px; }
+.chart-legend i { display:inline-block; width:15px; height:3px; border-radius:2px; }
 .metric { border:1px solid var(--line); border-radius:10px; padding:10px 12px; }
 .metric span { color:var(--muted); font-size:11px; display:block; }
 .metric b { font-size:18px; display:block; margin-top:2px; }
@@ -161,6 +166,8 @@ td.num, th.num { text-align:right; font-variant-numeric:tabular-nums; }
 
         sb.Append("</div></section>");
 
+        AppendHistoryChart(sb, update.History);
+
         sb.Append("<section class=\"section\"><h2>Средние и пиковые значения за сессию</h2>");
         sb.Append("<table><thead><tr><th>Ресурс</th><th class=\"num\">Среднее</th><th class=\"num\">Пик</th></tr></thead><tbody>");
         AppendStatRow(sb, "CPU", update.Stats.AvgCpuPercent, update.Stats.PeakCpuPercent);
@@ -175,7 +182,7 @@ td.num, th.num { text-align:right; font-variant-numeric:tabular-nums; }
         sb.Append(".</p></section>");
 
         sb.Append("<section class=\"section\"><h2>Активные процессы</h2>");
-        sb.Append("<table><thead><tr><th>Процесс</th><th class=\"num\">CPU</th><th class=\"num\">1 поток</th><th class=\"num\">GPU</th><th class=\"num\">VRAM</th><th class=\"num\">RAM</th><th class=\"num\">Потоков</th></tr></thead><tbody>");
+        sb.Append("<table><thead><tr><th>Процесс</th><th class=\"num\">CPU</th><th class=\"num\">1 поток</th><th class=\"num\">GPU</th><th class=\"num\">VRAM</th><th class=\"num\">RAM</th><th class=\"num\">Диск</th><th class=\"num\">Потоков</th></tr></thead><tbody>");
         foreach (var process in snapshot.Processes
                      .OrderByDescending(p => p.ActivityScore)
                      .Take(12))
@@ -194,6 +201,8 @@ td.num, th.num { text-align:right; font-variant-numeric:tabular-nums; }
             sb.Append(FormatMb(process.VramMb));
             sb.Append("</td><td class=\"num\">");
             sb.Append(FormatMb(process.WorkingSetMb));
+            sb.Append("</td><td class=\"num\">");
+            sb.Append(process.DiskMbps >= 0.05 ? $"{process.DiskMbps:0.0} МБ/с" : "—");
             sb.Append("</td><td class=\"num\">");
             sb.Append(process.ThreadCount.ToString(Ru));
             sb.Append("</td></tr>");
@@ -264,6 +273,95 @@ td.num, th.num { text-align:right; font-variant-numeric:tabular-nums; }
         sb.Append(WebUtility.HtmlEncode(finding.Summary));
         sb.Append("</p></div>");
     }
+
+    private static void AppendHistoryChart(StringBuilder sb, IReadOnlyList<HistoryPoint> history)
+    {
+        if (history.Count < 2)
+        {
+            return;
+        }
+
+        const double width = 900;
+        const double height = 230;
+        const double left = 38;
+        const double right = 12;
+        const double top = 12;
+        const double bottom = 26;
+        var plotWidth = width - left - right;
+        var plotHeight = height - top - bottom;
+
+        var series = new (string Name, string Color, Func<HistoryPoint, double> Value)[]
+        {
+            ("CPU", "#356fe0", p => p.CpuPercent),
+            ("GPU", "#7c5ce5", p => p.GpuPercent),
+            ("RAM", "#11845b", p => p.RamPercent),
+            ("VRAM", "#d97706", p => p.VramPercent),
+            ("Диск", "#0891b2", p => p.DiskPercent)
+        };
+
+        sb.Append("<section class=\"section\" id=\"history\"><h2>История нагрузки</h2>");
+        sb.Append("<p class=\"note\">Каждая точка — одна секунда наблюдения. Снимок сохраняет последние ");
+        sb.Append(history.Count.ToString(Ru));
+        sb.Append(" секунд, поэтому в отчёт попадают короткие всплески, которые легко пропустить в реальном времени.</p>");
+        sb.Append("<div class=\"chart-wrap\"><svg viewBox=\"0 0 900 230\" role=\"img\" aria-label=\"График CPU, GPU, RAM, VRAM и диска\">");
+
+        for (var i = 0; i <= 4; i++)
+        {
+            var value = 100 * i / 4.0;
+            var y = top + plotHeight - value / 100 * plotHeight;
+            sb.Append("<line x1=\"").Append(left).Append("\" y1=\"").Append(F(value))
+                .Append("\" x2=\"").Append(width - right).Append("\" y2=\"").Append(F(value))
+                .Append("\" stroke=\"#e2e8f0\" stroke-width=\"1\"/>");
+            sb.Append("<text x=\"").Append(F(left - 6)).Append("\" y=\"").Append(F(y + 4))
+                .Append("\" text-anchor=\"end\" font-size=\"10\" fill=\"#64748b\">")
+                .Append(value.ToString("0", Ru)).Append("%</text>");
+        }
+
+        var timeIndexes = new[] { 0, history.Count / 3, history.Count * 2 / 3, history.Count - 1 };
+        for (var i = 0; i < timeIndexes.Length; i++)
+        {
+            var x = left + plotWidth * i / 3.0;
+            sb.Append("<line x1=\"").Append(F(x)).Append("\" y1=\"").Append(top)
+                .Append("\" x2=\"").Append(F(x)).Append("\" y2=\"").Append(F(top + plotHeight))
+                .Append("\" stroke=\"#eef2f7\" stroke-width=\"1\"/>");
+            sb.Append("<text x=\"").Append(F(x)).Append("\" y=\"").Append(F(height - 8))
+                .Append("\" text-anchor=\"middle\" font-size=\"10\" fill=\"#64748b\">")
+                .Append(WebUtility.HtmlEncode(history[timeIndexes[i]].Timestamp.ToString("HH:mm:ss", Ru)))
+                .Append("</text>");
+        }
+
+        foreach (var item in series)
+        {
+            var points = new StringBuilder();
+            for (var i = 0; i < history.Count; i++)
+            {
+                var x = left + plotWidth * i / Math.Max(1, history.Count - 1);
+                var value = Math.Clamp(item.Value(history[i]), 0, 100);
+                var y = top + plotHeight - value / 100 * plotHeight;
+                if (i > 0)
+                {
+                    points.Append(' ');
+                }
+
+                points.Append(F(x)).Append(',').Append(F(y));
+            }
+
+            sb.Append("<polyline points=\"").Append(points).Append("\" fill=\"none\" stroke=\"")
+                .Append(item.Color).Append("\" stroke-width=\"2\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/>");
+        }
+
+        sb.Append("</svg></div>");
+        sb.Append("<div class=\"chart-legend\">");
+        foreach (var item in series)
+        {
+            sb.Append("<span><i style=\"background:").Append(item.Color).Append("\"></i>")
+                .Append(WebUtility.HtmlEncode(item.Name)).Append("</span>");
+        }
+
+        sb.Append("</div></section>");
+    }
+
+    private static string F(double value) => value.ToString("0.0", CultureInfo.InvariantCulture);
 
     private static void AppendStatRow(StringBuilder sb, string label, double? average, double peak)
     {

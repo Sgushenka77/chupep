@@ -7,6 +7,7 @@ using System.Windows;
 using System.Windows.Data;
 using System.Windows.Media;
 using System.Windows.Threading;
+using LoadLens.App.Controls;
 using LoadLens.Core.Diagnostics;
 using LoadLens.Core.Models;
 using LoadLens.Core.Reports;
@@ -29,12 +30,15 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private readonly ObservableCollection<EvidenceChipViewModel> _evidence = new();
     private readonly ObservableCollection<ActionItemViewModel> _primaryActions = new();
     private readonly ObservableCollection<FindingRowViewModel> _secondaryFindings = new();
+    private readonly ObservableCollection<TrendStatViewModel> _trendStats = new();
+    private readonly ObservableCollection<TrendEventViewModel> _trendEvents = new();
     private readonly RelayCommand _togglePauseCommand;
     private readonly RelayCommand _saveReportCommand;
     private readonly RelayCommand _openLastReportCommand;
     private readonly RelayCommand _openReportsFolderCommand;
     private readonly RelayCommand _showProcessesCommand;
     private readonly RelayCommand _showReportCommand;
+    private readonly RelayCommand _saveHistoryCsvCommand;
 
     private MonitoringUpdate? _lastUpdate;
     private bool _disposed;
@@ -94,6 +98,12 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private string _hardwarePrivileges = "—";
     private string _sessionStartedText = string.Empty;
     private string _verdictKind = "Наблюдение";
+    private ProcessRowViewModel? _selectedProcess;
+    private IReadOnlyList<ChartSeries> _trendSeries = Array.Empty<ChartSeries>();
+    private string _trendWindowText = "Последние 3 минуты";
+    private string _trendCsvStatus = "CSV: история появится после первых выборок";
+    private string _lastDiagnosisKey = string.Empty;
+    private int _autoSelectedTargetPid;
 
     public MainViewModel()
     {
@@ -125,6 +135,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         _openReportsFolderCommand = new RelayCommand(OpenReportsFolder);
         _showProcessesCommand = new RelayCommand(() => SelectedPage = "Processes");
         _showReportCommand = new RelayCommand(() => SelectedPage = "Report");
+        _saveHistoryCsvCommand = new RelayCommand(SaveHistoryCsv, () => _lastUpdate is not null);
 
         _service = new MonitoringService(AppVersion);
         _service.Updated += OnUpdated;
@@ -149,6 +160,47 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public ObservableCollection<ActionItemViewModel> PrimaryActions => _primaryActions;
 
     public ObservableCollection<FindingRowViewModel> SecondaryFindings => _secondaryFindings;
+
+    public ObservableCollection<TrendStatViewModel> TrendStats => _trendStats;
+
+    public ObservableCollection<TrendEventViewModel> TrendEvents => _trendEvents;
+
+    public IReadOnlyList<ChartSeries> TrendSeries
+    {
+        get => _trendSeries;
+        private set => Set(ref _trendSeries, value);
+    }
+
+    public string TrendWindowText
+    {
+        get => _trendWindowText;
+        private set => Set(ref _trendWindowText, value);
+    }
+
+    public string TrendCsvStatus
+    {
+        get => _trendCsvStatus;
+        private set => Set(ref _trendCsvStatus, value);
+    }
+
+    public ProcessRowViewModel? SelectedProcess
+    {
+        get => _selectedProcess;
+        set
+        {
+            if (Set(ref _selectedProcess, value))
+            {
+                Raise(nameof(HasSelectedProcess));
+                Raise(nameof(ShowNoSelectedProcess));
+            }
+        }
+    }
+
+    public bool HasSelectedProcess => SelectedProcess is not null;
+
+    public bool ShowNoSelectedProcess => !HasSelectedProcess;
+
+    public RelayCommand SaveHistoryCsvCommand => _saveHistoryCsvCommand;
 
     public RelayCommand TogglePauseCommand => _togglePauseCommand;
 
@@ -175,6 +227,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             (PageTitle, PageSubtitle) = value switch
             {
                 "Processes" => ("Процессы", "Детализация нагрузки по CPU, GPU и памяти"),
+                "Trends" => ("Динамика", "Последние 3 минуты, события и снимок инцидента"),
                 "Report" => ("Отчёт", "Снимок состояния, доказательства и рекомендации"),
                 _ => ("Почему лагает?", "Что именно ограничивает систему прямо сейчас")
             };
@@ -599,12 +652,106 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         UpdateMetrics(update);
         UpdateFindings(update.Diagnosis);
         UpdateProcesses(update.Snapshot, update.Diagnosis);
+        UpdateTrends(update);
+        RecordDiagnosisEvent(update.Diagnosis);
         UpdateSession(update.Stats, update.Snapshot.Timestamp);
         UpdateStatus(update.Snapshot.Timestamp);
 
         if (first)
         {
             _saveReportCommand.RaiseCanExecuteChanged();
+            _saveHistoryCsvCommand.RaiseCanExecuteChanged();
+        }
+    }
+
+    private void UpdateTrends(MonitoringUpdate update)
+    {
+        var history = update.History;
+        var stats = update.Stats;
+
+        TrendWindowText = history.Count > 0
+            ? $"Последние {FormatDuration(stats.Duration)}"
+            : "История начнёт заполняться после первых выборок";
+
+        TrendSeries = new[]
+        {
+            new ChartSeries("CPU", Visuals.Brush(Visuals.Blue), history.Select(h => h.CpuPercent).ToArray()),
+            new ChartSeries("GPU", Visuals.Brush(Visuals.Purple), history.Select(h => h.GpuPercent).ToArray()),
+            new ChartSeries("RAM", Visuals.Brush(Visuals.Green), history.Select(h => h.RamPercent).ToArray()),
+            new ChartSeries("VRAM", Visuals.Brush(Visuals.Orange), history.Select(h => h.VramPercent).ToArray()),
+            new ChartSeries("Диск", Visuals.Brush(Visuals.Cyan), history.Select(h => h.DiskPercent).ToArray())
+        };
+
+        var diskAverage = history.Count > 0 ? history.Average(h => h.DiskPercent) : 0;
+        var diskPeak = history.Count > 0 ? history.Max(h => h.DiskPercent) : 0;
+
+        _trendStats.Clear();
+        _trendStats.Add(TrendStat("CPU", update.Snapshot.Cpu.TotalPercent, stats.AvgCpuPercent, stats.PeakCpuPercent, Visuals.Blue));
+        _trendStats.Add(TrendStat("GPU", update.Snapshot.Gpu.LoadPercent, stats.AvgGpuPercent, stats.PeakGpuPercent, Visuals.Purple));
+        _trendStats.Add(TrendStat("RAM", update.Snapshot.Memory.UsedPercent, stats.AvgRamPercent, stats.PeakRamPercent, Visuals.Green));
+        _trendStats.Add(TrendStat("VRAM", update.Snapshot.Gpu.VramUsagePercent ?? 0,
+            history.Count > 0 ? history.Average(h => h.VramPercent) : 0, stats.PeakVramPercent, Visuals.Orange));
+        _trendStats.Add(TrendStat("Диск", update.Snapshot.Disk.ActivePercent, diskAverage, diskPeak, Visuals.Cyan));
+
+        TrendCsvStatus = history.Count > 0
+            ? $"CSV: {history.Count} точек · {FormatDuration(stats.Duration)}"
+            : "CSV: история появится после первых выборок";
+    }
+
+    private static TrendStatViewModel TrendStat(
+        string label,
+        double now,
+        double average,
+        double peak,
+        Color color) => new()
+    {
+        Label = label,
+        NowText = Visuals.Pct(now),
+        AverageText = Visuals.Pct(average),
+        PeakText = Visuals.Pct(peak),
+        NowPercent = Math.Clamp(now, 0, 100),
+        Accent = Visuals.Brush(color)
+    };
+
+    private void RecordDiagnosisEvent(DiagnosisResult diagnosis)
+    {
+        var key = diagnosis.Primary.Kind == FindingKind.NoIssue
+            ? "healthy"
+            : $"{diagnosis.Primary.Id}|{diagnosis.Target?.Name}";
+
+        if (string.IsNullOrEmpty(_lastDiagnosisKey))
+        {
+            _lastDiagnosisKey = key;
+            _trendEvents.Add(new TrendEventViewModel
+            {
+                TimeText = diagnosis.Timestamp.ToString("HH:mm:ss"),
+                Title = "Мониторинг запущен",
+                Accent = Visuals.Brush(Visuals.Green)
+            });
+            return;
+        }
+
+        if (key == _lastDiagnosisKey)
+        {
+            return;
+        }
+
+        _lastDiagnosisKey = key;
+        if (diagnosis.Primary.Kind == FindingKind.Calibrating)
+        {
+            return;
+        }
+
+        _trendEvents.Insert(0, new TrendEventViewModel
+        {
+            TimeText = diagnosis.Timestamp.ToString("HH:mm:ss"),
+            Title = diagnosis.Primary.Title,
+            Accent = Visuals.SeverityBrush(diagnosis.Primary.Severity)
+        });
+
+        while (_trendEvents.Count > 12)
+        {
+            _trendEvents.RemoveAt(_trendEvents.Count - 1);
         }
     }
 
@@ -818,6 +965,20 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             row.Update(process, process.Pid == targetPid);
         }
 
+        if (SelectedProcess is not null && !incoming.Contains(SelectedProcess.Pid))
+        {
+            SelectedProcess = null;
+        }
+
+        if (targetPid is { } hotPid &&
+            (SelectedProcess is null || _autoSelectedTargetPid != hotPid) &&
+            _rowsByPid.TryGetValue(hotPid, out var targetRow))
+        {
+            SelectedProcess = targetRow;
+        }
+
+        _autoSelectedTargetPid = targetPid ?? 0;
+
         _topProcesses.Clear();
         foreach (var process in snapshot.Processes
                      .OrderByDescending(p => p.ActivityScore)
@@ -936,6 +1097,42 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             ReportPathText = $"Последний отчёт: {Path.GetFileName(dialog.FileName)}";
             LastError = string.Empty;
             OpenPath(dialog.FileName);
+        }
+        catch (Exception ex)
+        {
+            LastError = ex.Message;
+        }
+    }
+
+    private void SaveHistoryCsv()
+    {
+        if (_lastUpdate is null)
+        {
+            return;
+        }
+
+        try
+        {
+            Directory.CreateDirectory(ReportsFolder);
+            var dialog = new SaveFileDialog
+            {
+                Title = "Экспорт истории LoadLens",
+                Filter = "CSV (*.csv)|*.csv",
+                DefaultExt = ".csv",
+                AddExtension = true,
+                OverwritePrompt = true,
+                InitialDirectory = ReportsFolder,
+                FileName = $"LoadLens_history_{DateTime.Now:yyyy-MM-dd_HH-mm}.csv"
+            };
+
+            if (dialog.ShowDialog() != true)
+            {
+                return;
+            }
+
+            File.WriteAllText(dialog.FileName, CsvHistoryBuilder.Build(_lastUpdate.History), new UTF8Encoding(true));
+            TrendCsvStatus = $"CSV сохранён: {Path.GetFileName(dialog.FileName)}";
+            LastError = string.Empty;
         }
         catch (Exception ex)
         {

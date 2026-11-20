@@ -55,6 +55,7 @@ public partial class MainWindow : Window
         var target = _viewModel.SelectedPage switch
         {
             "Processes" => NavProcesses,
+            "Trends" => NavTrends,
             "Report" => NavReport,
             _ => NavOverview
         };

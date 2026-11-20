@@ -78,12 +78,23 @@ public sealed record ProcessMetrics(
     double VramMb,
     double SharedVramMb,
     bool HasWindow,
-    double ActivityScore)
+    double ActivityScore,
+    IReadOnlyList<ProcessThreadMetric>? TopThreads = null,
+    double DiskReadMbps = 0,
+    double DiskWriteMbps = 0)
 {
     public string DisplayName => Name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)
         ? Name
         : Name + ".exe";
+
+    public IReadOnlyList<ProcessThreadMetric> Threads =>
+        TopThreads ?? Array.Empty<ProcessThreadMetric>();
+
+    public double DiskMbps => DiskReadMbps + DiskWriteMbps;
 }
+
+/// <summary>CPU usage of one thread relative to a single logical core.</summary>
+public sealed record ProcessThreadMetric(int ThreadId, double CpuPercent);
 
 /// <summary>Static information about the machine.</summary>
 public sealed record SystemInfo(

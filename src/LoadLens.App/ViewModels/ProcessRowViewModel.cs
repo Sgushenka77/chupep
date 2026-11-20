@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using System.Windows.Media;
 using LoadLens.Core.Models;
 
@@ -13,9 +14,14 @@ public sealed class ProcessRowViewModel : ObservableObject
     private string _gpuText = "—";
     private string _vramText = "—";
     private string _ramText = "—";
+    private string _diskText = "—";
+    private string _diskReadText = "0.0 МБ/с";
+    private string _diskWriteText = "0.0 МБ/с";
     private string _threadsText = "0";
+    private string _windowText = "фон";
     private bool _isTarget;
     private bool _hasWindow;
+    private bool _hasThreads;
     private double _cpuPercent;
     private double _gpuPercent;
     private double _activityScore;
@@ -26,6 +32,10 @@ public sealed class ProcessRowViewModel : ObservableObject
     }
 
     public int Pid { get; }
+
+    public ProcessMetrics? Model { get; private set; }
+
+    public ObservableCollection<ProcessThreadRowViewModel> TopThreads { get; } = new();
 
     public string DisplayName
     {
@@ -75,6 +85,36 @@ public sealed class ProcessRowViewModel : ObservableObject
         private set => Set(ref _ramText, value);
     }
 
+    public string DiskText
+    {
+        get => _diskText;
+        private set => Set(ref _diskText, value);
+    }
+
+    public string DiskReadText
+    {
+        get => _diskReadText;
+        private set => Set(ref _diskReadText, value);
+    }
+
+    public string DiskWriteText
+    {
+        get => _diskWriteText;
+        private set => Set(ref _diskWriteText, value);
+    }
+
+    public string WindowText
+    {
+        get => _windowText;
+        private set => Set(ref _windowText, value);
+    }
+
+    public bool HasThreads
+    {
+        get => _hasThreads;
+        private set => Set(ref _hasThreads, value);
+    }
+
     public string ThreadsText
     {
         get => _threadsText;
@@ -113,6 +153,7 @@ public sealed class ProcessRowViewModel : ObservableObject
 
     public void Update(ProcessMetrics process, bool isTarget)
     {
+        Model = process;
         DisplayName = process.DisplayName;
         Initials = Visuals.Initials(process.Name);
         Accent = Visuals.ProcessBrush(process.Name);
@@ -126,9 +167,25 @@ public sealed class ProcessRowViewModel : ObservableObject
         GpuText = process.GpuPercent >= 0.5 ? Visuals.Pct(process.GpuPercent) : "—";
         VramText = process.VramMb >= 8 ? Visuals.FormatMb(process.VramMb) : "—";
         RamText = Visuals.FormatMb(process.WorkingSetMb);
+        DiskText = process.DiskMbps >= 0.05 ? $"{process.DiskMbps:0.0} МБ/с" : "—";
+        DiskReadText = $"{process.DiskReadMbps:0.0} МБ/с";
+        DiskWriteText = $"{process.DiskWriteMbps:0.0} МБ/с";
         ThreadsText = process.ThreadCount.ToString();
+        WindowText = process.HasWindow ? "окно" : "фон";
         HasWindow = process.HasWindow;
         IsTarget = isTarget;
+
+        TopThreads.Clear();
+        foreach (var thread in process.Threads.Take(5))
+        {
+            TopThreads.Add(new ProcessThreadRowViewModel
+            {
+                ThreadId = thread.ThreadId,
+                CpuPercent = thread.CpuPercent
+            });
+        }
+
+        HasThreads = TopThreads.Count > 0;
     }
 
     public bool Matches(string query) =>
